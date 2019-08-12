@@ -3,42 +3,66 @@ from datetime import datetime as dt
 import re
 import os
 
-RED = "\033[1;31m"
-BLUE = "\033[1;34m"
-PRUP = "\033[1;35m"
-CYAN = "\033[1;36m"
-YELLO = "\033[1;33m"
+RED = "\033[0;31m"
+BLUE = "\033[0;34m"
+PRUP = "\033[0;35m"
+CYAN = "\033[0;36m"
+YELLO = "\033[0;33m"
 GREEN = "\033[0;32m"
+WHITE = '\033[0;37m"'
 RESET = "\033[0;0m"
 BOLD = "\033[;1m"
 REVERSE = "\033[;7m"
 
+GAP = 45
 
-def export(data, name='data'):
-    i = 0
-    while os.path.isfile(name + ' ' + str(i) + '.csv'):
-        i += 1
-    fp = open(name + ' ' + str(i) + '.csv', 'w')
-    for r in data:
+
+# export the given array to a csv file
+def export(_data, name='data'):
+    if os.path.isfile(name + '.csv'):
+        i = 0
+        while os.path.isfile(name + ' ' + str(i) + '.csv'):
+            i += 1
+        name = name + ' ' + str(i)
+
+    fp = open(name + '.csv', 'w')
+    for r in _data:  # write data to file
         a = [r[0].strftime('%b %d %y'), r[1], format_money(r[2]), format_money(r[3]) if len(r) > 3 else '',
              str(r[4]) if len(r) > 4 else '', str(r[5]) if len(r) > 5 else '']
         fp.write(','.join(a) + '\n')
     fp.close()
 
 
-def imp(d, filename):
+def imp(d, _dic, filename):
     with open(filename) as f:
-        for line in f:
+        for i, line in enumerate(f):
             r = line.split(',')
             date = dt.strptime(r[0], '%b %d %y')
-            amnt = int(r[2].replace('$', '').replace('.', ''))
+            base_amnt = int(r[2].replace('$', '').replace('.', ''))
 
-            d.append([date, r[1], amnt])
+            # if we have saved data from previous execution, update dict and d
+            extra_arr = []
+            if len(r) > 3 and r[3] is not '' and r[4] is not '':
+                extra_arr.append(int(r[3].replace('$', '').replace('.', '')))
+                extra_arr.append(float(r[4]))
+                extra_arr.append(r[5].replace('\n', ''))
+
+                if not r[1] in _dic:  # if this description has not been seen before
+                    _dic[r[1]] = [0, 0, {}]
+
+                hist = _dic[r[1]]
+                hist[0] = int((hist[0] * hist[1] + base_amnt) // (hist[1] + 1))  # adjust average price
+                hist[1] += 1
+                hist[2][i] = (extra_arr[1], extra_arr[2])
+
+            arr = [date, r[1], base_amnt]
+            arr.extend(extra_arr)
+            d.append(arr)
     return d
 
 
 def reformat(filename='accountactivity.csv'):
-    data = []
+    _data = []
     with open(filename) as f:
         for line in f:
             r = line.split(',')
@@ -48,8 +72,8 @@ def reformat(filename='accountactivity.csv'):
             date = dt.strptime(r[0], "%m/%d/%Y")
             amnt = int(r[2].replace('.', ''))
 
-            data.append((date, r[1], amnt))
-    return data
+            _data.append((date, r[1], amnt))
+    return _data
 
 
 def format_money(s: int):
@@ -75,17 +99,18 @@ def pprint(*args):
 
 
 # noinspection PyShadowingNames
-def print_transaction(trans, dic):
+def print_transaction(trans, _dic):
+    blank = GAP - len(trans[1])
     pprint(BLUE, dt.strftime(trans[0], '%b %d %y'), '\t',  # date
-           BOLD, CYAN, trans[1], '\t\t',  # description
+           BOLD, CYAN, trans[1], '.' * blank,  # description
            BOLD, RED, format_money(trans[2]))  # amount
 
     # if this description has been seen before show average price and most common ratio
-    if trans[1] in dic:
-        trans_info = dic[trans[1]]
+    if trans[1] in _dic:
+        trans_info = _dic[trans[1]]
         common_tup = find_common(trans_info[2])
-        pprint(PRUP, BOLD, '\t\t\tAverage Price: ', CYAN, format_money(trans_info[0]), '\t\t',
-               PRUP, 'Usual: ', YELLO, common_tup[0], ' ', common_tup[1])
+        pprint(PRUP, BOLD, '\t\t\tAverage Price: ', YELLO, format_money(trans_info[0]), '\t\t',
+               BOLD, PRUP, 'Usual: ', RESET, YELLO, common_tup[0], ' ', common_tup[1])
 
 
 # history = {index:(ratio, note) ...}
@@ -114,6 +139,91 @@ def find_common(history):
 #   'skip' - skip current transaction
 #   'back' - go back to last transaction
 #   'history' - print history for current transaction
+def start(_data, _dic, index=0):
+    # main loop
+    loop_running = True
+    i = index
+    while loop_running:
+        row = _data[i]  # current transaction
+        print_transaction(row, _dic)
+
+        # get user input
+        input_good = False
+        while not input_good:
+            s = input()
+            input_good = bool(big.match(s))
+            if not input_good:
+                pprint(BOLD, RED, "Bad input")
+            elif input_good and s == '' and not row[1] in _dic:
+                pprint(BOLD, RED, "Don't have default for this description yet")
+                input_good = False
+
+        # noinspection PyUnboundLocalVariable
+        if s == '' or rwd.match(s):  # if updating current transaction
+            if s is not '':  # if not using defaults
+                x = s.split(' ')
+                ratio = float(x[0] if x[0] is not '5' else '0.5')
+                note = x[1] if len(x) > 1 else ''
+
+                if not row[1] in _dic:  # if this description has not been seen before
+                    _dic[row[1]] = [0, 0, {}]
+
+            elif s == '' and row[1] in _dic.keys():  # if using defaults
+                if i in _dic[row[1]][2].keys():
+                    i += 1
+                    continue
+                common = find_common(_dic[row[1]][2])  # find most common (ratio, note) pair
+                ratio, note = common[0], common[1]
+            else:
+                assert False
+
+            arr = _dic[row[1]]
+            arr[0] = int((arr[0] * arr[1] + row[2]) // (arr[1] + 1))  # adjust average price
+            arr[1] += 1
+            arr[2][i] = (ratio, note)
+
+            if len(row) == 3:
+                row.extend([int(row[2] * ratio), ratio, note])
+            elif len(row) == 6:
+                row[3:7] = [int(row[2] * ratio), ratio, note]
+            else:
+                assert False
+
+            i += 1
+        elif cmd.match(s):
+            if s == 'back':
+                i -= 1
+            elif s == 'skip':
+                i += 1
+            elif s.startswith('goto'):
+                x = s.split(' ')
+                i = int(x[1])
+            elif s == 'pause':
+                print(i)
+                return i
+            elif s == 'history':
+                if row[1] in _dic:
+                    for h in _dic[row[1]][2].keys():
+                        trans = _data[h]
+                        pprint(BLUE, dt.strftime(trans[0], '%b %d %y'), '\t',  # date
+                               BOLD, RED, format_money(trans[2]), '\t',  # amount
+                               YELLO, _dic[row[1]][2][h][0], '  ',  # ratio
+                               YELLO, _dic[row[1]][2][h][1], '\n\n')  # note
+                    else:
+                        pprint(BOLD, RED, 'No history yet')
+            elif s == 'save':
+                # filename = 'data_' + dt.now().strftime('%b%m_%I-%M-%S%p')
+                filename = 'last_' + str(i)
+                export(_data, filename)
+
+        else:
+            assert False
+
+
+def resume():
+    global data, dic, end
+    start(data, dic, end)
+
 
 # stores all data from csv files
 data = []
@@ -124,66 +234,21 @@ data = []
 dic = {}
 
 # regexes to match commands
-ratio_with_desc = r'([150]|(0?\.\d+))( .+)?'
-command = r'^(pause|save|skip|back|history) *$'
+ratio_with_desc = r'^([150]|(0?\.\d+))( .+)?$'
+command = r'^(pause|save|skip|back|history|goto \d+) *$'
 
 big = re.compile(r'^$|' + ratio_with_desc + '|' + command)
 rwd = re.compile(ratio_with_desc)
 cmd = re.compile(command)
 
 # do import
-imp(data, 'data 0.csv')
-imp(data, 'data 1.csv')
-
-# main loop
-loop_running = True
-i = 0
-while loop_running:
-    row = data[i]  # current transaction
-    print_transaction(row, dic)
-
-    # get user input
-    input_good = False
-    while not input_good:
-        s = input()
-        input_good = bool(big.match(s))
-        if input_good and s == '' and not row[1] in dic:
-            pprint(BOLD, RED, "Don't have default for this description yet")
-            input_good = False
-
-    # noinspection PyUnboundLocalVariable
-    if s == '' or rwd.match(s):  # if updating current transaction
-        ratio = -1
-        note = ''
-
-        if s is not '':  # if not using defaults
-            x = s.split(' ')
-            ratio = float(x[0] if x[0] is not '5' else '0.5')
-            note = x[1] if len(x) > 1 else ''
-
-            if not row[1] in dic:  # if this description has not been seen before
-                dic[row[1]] = [0, 0, {}]
-
-        elif s == '' and row[1] in dic.keys():  # if using defaults
-            common = find_common(dic[row[1]][2])  # find most common (ratio, note) pair
-            ratio, note = common[0], common[1]
-        else:
-            assert False
-
-        arr = dic[row[1]]
-        arr[0] = int((arr[0] + row[2] * ratio) // (arr[1] + 1))  # adjust average price
-        arr[1] += 1
-        arr[2][i] = (ratio, note)
-
-        row.extend([int(row[2] * ratio), ratio, note])
-
-        i += 1
-    elif cmd.match(s):
-        if s == 'back':
-            i -= 1
-        elif s == 'skip':
-            i += 1
-        elif s == 'pause':
-
-    else:
-        assert False
+# check if there is a saved "last" file
+last_arr = [int(x[5:-4]) for x in os.listdir() if len(x) >= 10 and re.match(r'last_\d+\.csv', x)]
+if len(last_arr) > 0:
+    index = max(last_arr)
+    imp(data, dic, f'last_{index}.csv')
+else:
+    index = 0
+    imp(data, dic, 'master.csv')
+data.sort()
+end = start(data, dic, index)

@@ -11,7 +11,7 @@ pn_row0_y = 1240
 x = (310, 940, 2000)
 w = (300, 1150, 430)
 
-pdfs = ['aug', 'jul', 'jun', 'may', 'nov', 'oct', 'sep']
+pdfs = ['mar19', 'feb19', 'jan19', 'dec18']
 
 
 def convert(pdf_file):
