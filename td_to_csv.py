@@ -4,8 +4,8 @@ from datetime import datetime as dt
 from pdf2image import convert_from_path
 import os
 
-# directory to search for bank statement pdfs
-DIR_NAME = 'statements'
+DIR_NAME = 'statements'  # directory to search for bank statement pdfs
+CSV_NAME = 'data'  # file name of the saved csv file
 
 # constants for determining pixel coordinates of statement info. Dependant on the resolution the PDFs are converted to.
 P0_ROW0_Y = 585  # y value of first row of table on first page
@@ -132,6 +132,7 @@ def export(data, name='data'):
 if __name__ == '__main__':
 
     all_files = os.listdir(DIR_NAME)
+    print(all_files)
 
     transaction_list = []
     for file_name in all_files:
@@ -187,4 +188,4 @@ if __name__ == '__main__':
             transaction_list.append((date, desc, amnt))
 
     transaction_list.sort()
-    export(transaction_list)
+    export(transaction_list, name=CSV_NAME)
